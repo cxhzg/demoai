@@ -1,0 +1,14 @@
+.env
+.index/
+logs/
+.pytest_cache/
+.test_tmp/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.venv/
+venv/
+env/
+.streamlit/secrets.toml
