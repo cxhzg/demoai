@@ -12,3 +12,5 @@ __pycache__/
 venv/
 env/
 .streamlit/secrets.toml
+.uploads/
+README_zh.md

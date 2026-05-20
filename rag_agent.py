@@ -6,9 +6,7 @@ import pickle
 import re
 
 import numpy as np
-from docx import Document
 from openai import OpenAI
-from pypdf import PdfReader
 from sentence_transformers import SentenceTransformer
 
 from config import (
@@ -17,7 +15,6 @@ from config import (
     CHUNK_OVERLAP_PARAGRAPHS,
     CHUNK_SIZE,
     DEEPSEEK_BASE_URL,
-    DOCS_DIR,
     EMBEDDING_MODEL_NAME,
     INDEX_DIR,
     INDEX_FILE,
@@ -26,79 +23,11 @@ from config import (
     REWRITE_HISTORY_MESSAGES,
     SEARCH_SCORE_RATIO,
     SEARCH_TOP_K,
-    SUPPORTED_EXTENSIONS,
 )
+from document_loader import load_documents
 from logger import get_logger
 
-
 logger = get_logger(__name__)
-
-
-def read_text_file(path):
-    return path.read_text(encoding="utf-8", errors="ignore")
-
-
-def read_pdf_file(path):
-    reader = PdfReader(path)
-    pages = []
-
-    for page in reader.pages:
-        text = page.extract_text()
-        if text:
-            pages.append(text)
-
-    return "\n\n".join(pages)
-
-
-def read_docx_file(path):
-    document = Document(path)
-    paragraphs = []
-
-    for paragraph in document.paragraphs:
-        text = paragraph.text.strip()
-        if text:
-            paragraphs.append(text)
-
-    return "\n\n".join(paragraphs)
-
-
-def read_document_file(path):
-    if path.suffix.lower() == ".docx":
-        return read_docx_file(path)
-
-    if path.suffix.lower() == ".pdf":
-        return read_pdf_file(path)
-
-    return read_text_file(path)
-
-
-def load_documents():
-    documents = []
-    errors = []
-
-    for path in DOCS_DIR.rglob("*"):
-        if not path.is_file():
-            continue
-
-        if path.suffix.lower() not in SUPPORTED_EXTENSIONS:
-            continue
-
-        try:
-            text = read_document_file(path)
-        except Exception as error:
-            logger.warning("Failed to read document %s: %s", path, error)
-            errors.append(
-                {
-                    "path": str(path),
-                    "error": str(error),
-                }
-            )
-            continue
-
-        if text.strip():
-            documents.append({"path": str(path), "text": text})
-
-    return documents, errors
 
 
 def split_paragraphs(text):
@@ -296,18 +225,18 @@ def build_embedding_index(chunks, model):
     return chunks
 
 
-def save_embedding_index(chunks):
-    INDEX_DIR.mkdir(exist_ok=True)
+def save_embedding_index(chunks, index_file=INDEX_FILE):
+    index_file.parent.mkdir(parents=True, exist_ok=True)
 
-    with INDEX_FILE.open("wb") as file:
+    with index_file.open("wb") as file:
         pickle.dump(chunks, file)
 
 
-def load_embedding_index():
-    if not INDEX_FILE.exists():
+def load_embedding_index(index_file=INDEX_FILE):
+    if not index_file.exists():
         return None
 
-    with INDEX_FILE.open("rb") as file:
+    with index_file.open("rb") as file:
         return pickle.load(file)
 
 
@@ -584,17 +513,22 @@ def rewrite_question(client, question, history):
 
 
 class RagAgent:
-    def __init__(self, api_key, rebuild=False):
+    def __init__(self, api_key, rebuild=False, extra_dirs=None, index_file=None):
         self.client = OpenAI(api_key=api_key, base_url=DEEPSEEK_BASE_URL)
         self.embedding_model = SentenceTransformer(EMBEDDING_MODEL_NAME)
         self.documents = []
         self.document_errors = []
         self.chunks = []
         self.rebuild = rebuild
+        self.extra_dirs = extra_dirs or []
+        self.index_file = index_file or INDEX_FILE
+
 
     def load(self):
         logger.info("Loading documents")
-        self.documents, self.document_errors = load_documents()
+        self.documents, self.document_errors = load_documents(
+            extra_dirs=self.extra_dirs
+        )
         self.chunks = build_chunks(self.documents)
         logger.info(
             "Loaded %s documents, %s document errors, %s chunks",
@@ -603,7 +537,7 @@ class RagAgent:
             len(self.chunks),
         )
 
-        cached_chunks = None if self.rebuild else load_embedding_index()
+        cached_chunks = None if self.rebuild else load_embedding_index(self.index_file)
 
         if is_cache_valid(self.chunks, cached_chunks):
             self.chunks = cached_chunks
@@ -612,7 +546,7 @@ class RagAgent:
 
         logger.info("Building embedding index")
         self.chunks = build_embedding_index(self.chunks, self.embedding_model)
-        save_embedding_index(self.chunks)
+        save_embedding_index(self.chunks, self.index_file)
         logger.info("Saved rebuilt embedding index")
         return "rebuilt"
 
