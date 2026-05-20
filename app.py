@@ -21,7 +21,6 @@ st.set_page_config(
 )
 
 
-@st.cache_resource
 def get_agent(api_key, session_upload_dir_text=None, session_id=None):
     extra_dirs = []
 
@@ -261,7 +260,6 @@ def main():
                 st.info("This file has already been uploaded.")
         
         if st.button("Rebuild index"):
-            get_agent.clear()
             st.session_state.messages = []
             st.rerun()
 
@@ -270,7 +268,6 @@ def main():
                 session_upload_dir,
                 st.session_state.session_id,
             )
-            get_agent.clear()
             st.session_state.messages = []
             st.session_state.processed_uploads = set()
             reset_upload_widget()
