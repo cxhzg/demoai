@@ -81,7 +81,15 @@ def load_documents(extra_dirs=None):
                 )
                 continue
 
-            if text.strip():
-                documents.append({"path": str(path), "text": text})
+            if not text.strip():
+                errors.append(
+                    {
+                        "path": str(path),
+                        "error": "No extractable text found.",
+                    }
+                )
+                continue
+
+            documents.append({"path": str(path), "text": text})
 
     return documents, errors

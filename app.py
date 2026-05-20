@@ -21,11 +21,12 @@ st.set_page_config(
 )
 
 
-def get_agent(api_key, session_upload_dir_text=None, session_id=None):
+@st.cache_resource
+def get_agent(api_key, session_upload_dir=None, session_id=None):
     extra_dirs = []
 
-    if session_upload_dir_text is not None:
-        extra_dirs.append(Path(session_upload_dir_text))
+    if session_upload_dir is not None:
+        extra_dirs.append(session_upload_dir)
 
     index_file = None
 
@@ -60,6 +61,19 @@ def has_supported_documents(directory):
             return True
 
     return False
+
+
+def get_supported_files(directory):
+    if not directory.exists():
+        return []
+
+    files = []
+
+    for path in directory.rglob("*"):
+        if path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS:
+            files.append(str(path))
+
+    return files
 
 
 def clear_session_documents(session_upload_dir, session_id):
@@ -154,7 +168,8 @@ def render_matches(matches):
 
 def render_document_list(documents, session_upload_dir):
     project_documents = []
-    uploaded_documents = []
+    indexed_uploaded_documents = []
+    uploaded_files = get_supported_files(session_upload_dir)
 
     session_upload_dir_text = str(session_upload_dir)
 
@@ -162,7 +177,7 @@ def render_document_list(documents, session_upload_dir):
         path = document["path"]
 
         if path.startswith(session_upload_dir_text):
-            uploaded_documents.append(path)
+            indexed_uploaded_documents.append(path)
         else:
             project_documents.append(path)
 
@@ -174,9 +189,14 @@ def render_document_list(documents, session_upload_dir):
         st.caption("No project documents.")
 
     st.subheader("Your uploaded documents")
-    if uploaded_documents:
-        for path in uploaded_documents:
-            st.write(path)
+    if uploaded_files:
+        indexed_set = set(indexed_uploaded_documents)
+
+        for path in uploaded_files:
+            if path in indexed_set:
+                st.write(path)
+            else:
+                st.write(f"{path} (not indexed)")
     else:
         st.caption("No uploaded documents.")
 
@@ -223,9 +243,7 @@ def main():
     has_uploaded_documents = has_supported_documents(session_upload_dir)
     agent, index_status = get_agent(
         api_key,
-        session_upload_dir_text=(
-            str(session_upload_dir) if has_uploaded_documents else None
-        ),
+        session_upload_dir=session_upload_dir if has_uploaded_documents else None,
         session_id=st.session_state.session_id if has_uploaded_documents else None,
     )
 
@@ -260,6 +278,7 @@ def main():
                 st.info("This file has already been uploaded.")
         
         if st.button("Rebuild index"):
+            get_agent.clear()
             st.session_state.messages = []
             st.rerun()
 
@@ -268,6 +287,7 @@ def main():
                 session_upload_dir,
                 st.session_state.session_id,
             )
+            get_agent.clear()
             st.session_state.messages = []
             st.session_state.processed_uploads = set()
             reset_upload_widget()
