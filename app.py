@@ -22,11 +22,11 @@ st.set_page_config(
 
 
 @st.cache_resource
-def get_agent(api_key, session_upload_dir=None, session_id=None):
+def get_agent(api_key, session_upload_dir_text=None, session_id=None):
     extra_dirs = []
 
-    if session_upload_dir is not None:
-        extra_dirs.append(session_upload_dir)
+    if session_upload_dir_text is not None:
+        extra_dirs.append(Path(session_upload_dir_text))
 
     index_file = None
 
@@ -224,7 +224,9 @@ def main():
     has_uploaded_documents = has_supported_documents(session_upload_dir)
     agent, index_status = get_agent(
         api_key,
-        session_upload_dir=session_upload_dir if has_uploaded_documents else None,
+        session_upload_dir_text=(
+            str(session_upload_dir) if has_uploaded_documents else None
+        ),
         session_id=st.session_state.session_id if has_uploaded_documents else None,
     )
 
