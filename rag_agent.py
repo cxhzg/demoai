@@ -4,6 +4,7 @@ import hashlib
 import json
 import pickle
 import re
+from functools import lru_cache
 
 import numpy as np
 from openai import OpenAI
@@ -28,6 +29,12 @@ from document_loader import load_documents
 from logger import get_logger
 
 logger = get_logger(__name__)
+
+
+@lru_cache(maxsize=1)
+def get_embedding_model():
+    logger.info("Loading embedding model: %s", EMBEDDING_MODEL_NAME)
+    return SentenceTransformer(EMBEDDING_MODEL_NAME)
 
 
 def split_paragraphs(text):
@@ -515,7 +522,7 @@ def rewrite_question(client, question, history):
 class RagAgent:
     def __init__(self, api_key, rebuild=False, extra_dirs=None, index_file=None):
         self.client = OpenAI(api_key=api_key, base_url=DEEPSEEK_BASE_URL)
-        self.embedding_model = SentenceTransformer(EMBEDDING_MODEL_NAME)
+        self.embedding_model = get_embedding_model()
         self.documents = []
         self.document_errors = []
         self.chunks = []
